@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from dateutil import parser
 from loguru import logger
@@ -7,10 +7,18 @@ from pycliarr.api.base_api import json_data
 
 
 class SonarrSeriesScanner:
-    def __init__(self, name: str, url: str, api_key: str, hours_before_air: int):
+    def __init__(
+        self,
+        name: str,
+        url: str,
+        api_key: str,
+        hours_before_air: int,
+        hours_after_air: int,
+    ):
         self.name = name
         self.sonarr_cli = SonarrCli(url, api_key)
         self.hours_before_air = min(hours_before_air, 12)
+        self.hours_after_air = max(hours_after_air, 0)
 
     def scan(self) -> None:
         with logger.contextualize(instance=self.name):
@@ -34,7 +42,7 @@ class SonarrSeriesScanner:
 
             for show in sorted(series, key=lambda s: s.title):
                 with logger.contextualize(item=show.title):
-                    if show.status.lower() == "continuing":
+                    if show.status.lower() == "continuing" or show.status.lower() == "upcoming":
                         episode_list = self.sonarr_cli.get_episode(show.id)
 
                         if len(episode_list) == 0:
@@ -103,10 +111,22 @@ class SonarrSeriesScanner:
     def __has_episode_already_aired(self, episode_air_date_utc):
         """
         Parameters:
-        episode_air_date_utc (datetime):The episode air date with utc timezone
+        episode_air_date_utc (datetime): The episode air date with UTC timezone.
+        Returns True if the episode has aired, and is not too old unless hours_after_air is 0.
 
         Returns:
-        bool True if episode has already aired
+        bool: True if the episode has aired, and (if hours_after_air > 0) not too long ago.
         """
+        now = datetime.now(timezone.utc)
+        time_diff = now - episode_air_date_utc
 
-        return (datetime.now(timezone.utc) - episode_air_date_utc).total_seconds() > 0
+        # Episode hasn't aired yet
+        if time_diff.total_seconds() < 0:
+            return False
+
+        # If hours_after_air is 0, accept any aired episode
+        if self.hours_after_air == 0:
+            return True
+
+        # Otherwise, check if it's within the allowed post-airing window
+        return time_diff <= timedelta(hours=self.hours_after_air)

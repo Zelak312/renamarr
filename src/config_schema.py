@@ -53,6 +53,7 @@ CONFIG_SCHEMA = {
                     Optional("enabled", default=False): bool,
                     Optional("hourly_job", default=False): bool,
                     Optional("hours_before_air", default=4): int,
+                    Optional("hours_after_air", default=0): int,
                 },
                 # keeping for backwards compatibility between v1.0.0 and v0.5
                 Optional(
